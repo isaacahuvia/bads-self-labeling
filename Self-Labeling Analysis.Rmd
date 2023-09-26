@@ -1,0 +1,279 @@
+---
+title: "Self-Labeling Analysis"
+output: html_document
+date: "2023-09-26"
+---
+
+Pre-registration: https://osf.io/mxnbu/
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+## Load packages
+library(tidyverse)
+library(here)
+library(kableExtra)
+library(scales)
+library(oddsratio)
+library(broom)
+
+## Load data
+df <- readRDS(here("Clean Data.rds"))
+
+## Set functions
+`%+%` <- paste0
+
+percents <- function(x) {
+  
+  df %>%
+    count({{x}}) %>%
+    mutate(pct = percent(n / sum(n), .1)) %>%
+    kable() %>%
+    kable_styling() %>%
+    return()
+  
+}
+
+percents_by_group <- function(x, g) {
+  
+  df %>%
+    count({{g}}, {{x}}) %>%
+    mutate(pct = percent(n / sum(n))) %>%
+    group_by({{g}}) %>%
+    mutate(group_pct = percent(n / sum(n), .1)) %>%
+    kable() %>%
+    kable_styling() %>%
+    return()
+  
+}
+```
+
+# Sample Description
+
+## Self-Labeling
+
+```{r}
+percents(depression_self_id)
+percents(PHQ8_cutoff)
+percents(depression_dx)
+
+percents_by_group(depression_self_id, PHQ8_cutoff)
+chisq.test(df$depression_self_id, df$PHQ8_cutoff)
+
+percents_by_group(depression_self_id, depression_dx)
+chisq.test(df$depression_self_id, df$depression_dx)
+```
+
+## Demographics
+
+```{r}
+df %>%
+  summarize(mean_age = mean(age),
+            sd_age = sd(age)) %>%
+  kable() %>%
+  kable_styling()
+
+percents(gender)
+percents(race_ethnicity)
+percents(family_income)
+```
+
+# RQ 1: Are demographic characteristics associated with depression self-labeling?
+
+We will assess the relationship between demographic characteristics via logistic regressions where self-labeling is the dependent variable and the demographic variable is the independent variable. We will report odds ratios for each demographic variable on self-labeling both without (4 regressions) and with (4 additional regressions) depression symptom severity as a covariate. 
+
+Missing data: Imputed with missForest algorithm.
+Multiple comparison adjustment: False discovery rate with α set to .05
+
+```{r}
+demographics <- c(
+  "age",
+  "gender",
+  "race_ethnicity",
+  "family_income"
+)
+
+rq_1_uncontrolled <- tibble()
+rq_1_controlled <- tibble()
+
+for(x in demographics) {
+  
+  if(x == "race_ethnicity") {
+    
+    model_data <- df %>%
+      filter(!race_ethnicity %in% c("AI/AN non-Hispanic", "NH/PI non-Hispanic"))
+    
+  } else model_data <- df
+
+  # Set formulas
+  formula_uncontrolled <- as.formula("depression_self_id ~ " %+% x)
+  formula_controlled <- as.formula("depression_self_id ~ " %+% x %+% "+ PHQ8")
+  
+  # Run logistic regressions
+  glm_uncontrolled <- glm(data = model_data, formula = formula_uncontrolled, family = "binomial")
+  glm_controlled <- glm(data = model_data, formula = formula_controlled, family = "binomial")
+  
+  # Save coefficients and p-values
+  coef_uncontrolled <- tidy(glm_uncontrolled)
+  coef_controlled <- tidy(glm_controlled)
+  
+  # Save odds ratios and confidence intervals
+  or_uncontrolled <- or_glm(data = model_data, model = glm_uncontrolled, incr = list(age = 1), ci = .95)
+  or_controlled <- or_glm(data = model_data, model = glm_controlled, incr = list(age = 1, PHQ8 = 1), ci = .95)
+  
+  # Combine coefficients, p-values, odds ratios, and confidence intervals
+  glm_output_uncontrolled <- inner_join(coef_uncontrolled, or_uncontrolled, by = c("term" = "predictor"))
+  glm_output_controlled <- inner_join(coef_controlled, or_controlled, by = c("term" = "predictor"))
+  
+  # Attach output to larger table
+  rq_1_uncontrolled <- rbind(rq_1_uncontrolled, glm_output_uncontrolled)
+  rq_1_controlled <- rbind(rq_1_controlled, glm_output_controlled)
+  
+}
+
+# Adjust p-values
+rq_1_uncontrolled$p_adj <- p.adjust(rq_1_uncontrolled$p.value, method = "fdr")
+rq_1_controlled$p_adj <- p.adjust(rq_1_controlled$p.value, method = "fdr")
+
+# Print output
+kable(rq_1_uncontrolled, caption = "RQ 1, Unadjusted") %>%
+  kable_styling()
+kable(rq_1_controlled, caption = "RQ 1, Adjusted") %>%
+  kable_styling()
+```
+
+# RQ 2: What is the relationship between self-labeling as being depressed and self-management strategies (emotion coping strategies, treatment efficacy beliefs)?
+
+We will assess the relationship between self-labeling and self-management strategies using linear regression, where the self-management variable is the dependent variable and depression self-labeling is the independent variable. Again, we will report regression coefficients for self-labeling on each self-management outcome both without (11 regressions) and with (11 additional regressions) depression symptom severity as a covariate.
+
+Missing data: Imputed with missForest algorithm.
+Multiple comparison adjustment: False discovery rate with α set to .05
+
+```{r}
+# RQ 2
+outcomes <- c(
+  "perceived_control",
+  "CERQ_self_blame",
+  "CERQ_other_blame",
+  "CERQ_rumination",
+  "CERQ_catastrophizing",
+  "CERQ_perspective",
+  "CERQ_refocusing",
+  "CERQ_reappraising",
+  "CERQ_acceptance",
+  "CERQ_planning",
+  "MHSAS_therapy",
+  "MHSAS_medication"
+)
+
+rq_2_uncontrolled <- tibble()
+rq_2_controlled <- tibble()
+
+for(y in outcomes) {
+  
+  model_data <- df
+
+  # Set formulas
+  formula_uncontrolled <- as.formula(y %+% "~ depression_self_id")
+  formula_controlled <- as.formula(y %+% "~ depression_self_id + PHQ8")
+  
+  # Run logistic regressions
+  lm_uncontrolled <- lm(data = model_data, formula = formula_uncontrolled)
+  lm_controlled <- lm(data = model_data, formula = formula_controlled)
+  
+  # Save coefficients and p-values
+  coef_uncontrolled <- tidy(lm_uncontrolled) %>%
+    mutate(ci_low = estimate - (1.96 * std.error),
+           ci_high = estimate + (1.96 * std.error)) %>%
+    filter(term != "(Intercept)")
+  coef_controlled <- tidy(lm_controlled) %>%
+    mutate(ci_low = estimate - (1.96 * std.error),
+           ci_high = estimate + (1.96 * std.error)) %>%
+    filter(term != "(Intercept)")
+  
+  # Attach DV information
+  coef_uncontrolled$dv <- y
+  coef_controlled$dv <- y
+  
+  # Attach output to larger table
+  rq_2_uncontrolled <- rbind(rq_2_uncontrolled, coef_uncontrolled)
+  rq_2_controlled <- rbind(rq_2_controlled, coef_controlled)
+  
+}
+
+# Adjust p-values
+rq_2_uncontrolled$p_adj <- p.adjust(rq_2_uncontrolled$p.value, method = "fdr")
+rq_2_controlled$p_adj <- p.adjust(rq_2_controlled$p.value, method = "fdr")
+
+# Print output
+kable(rq_2_uncontrolled, caption = "RQ 2, Unadjusted") %>%
+  kable_styling()
+kable(rq_2_controlled, caption = "RQ 2, Adjusted") %>%
+  kable_styling()
+```
+
+# Secondary Analyses
+
+RQ 2: We may explore non-linear relationships between depression self-labeling, symptom severity, and self-management strategies, e.g., by controlling for symptom severity using a quadratic term, or by conducting further analyses that only examine the relationship between self-labeling and self-management strategies among students with a limited range of depression symptom severity (e.g., only students who meet the clinical cutoff for depression; only students  who experience any depression symptoms; only students “at the margin” who are not clearly depressed or not depressed).
+
+```{r}
+# The relationship between self-labeling and perceived control appears to be moderated by depression symptom severity
+lm(
+  data = df,
+  formula = perceived_control ~ depression_self_id * PHQ8
+) %>%
+  summary()
+```
+
+# Plots
+
+Self-labeling by age and PHQ-8, smoothed
+
+```{r}
+df %>%
+  mutate(age_rounded = round(age)) %>%
+  filter(PHQ8_cutoff == T,
+         age_rounded %in% c(18, 19, 20, 21, 22)) %>%
+  group_by(age_rounded) %>%
+  summarize(n = n(),
+            prop_self_id = mean(depression_self_id),
+            sd_self_id = sd(depression_self_id)) %>%
+  mutate(se_self_id = sd_self_id / sqrt(n),
+         ci_lower = prop_self_id - (1.96 * se_self_id),
+         ci_upper = prop_self_id + (1.96 * se_self_id)) %>%
+  ggplot(aes(age_rounded, prop_self_id)) +
+  geom_point() + 
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper))
+```
+
+Outcomes by self-labeling and PHQ-8, smoothed
+
+```{r}
+df %>%
+  pivot_longer(cols = c("perceived_control", "CERQ_rumination", "CERQ_catastrophizing", "CERQ_perspective", "CERQ_refocusing", "CERQ_reappraising", "CERQ_planning", "MHSAS_medication")) %>%
+  mutate(name = recode(
+    name, 
+    CERQ_acceptance = "CERQ: Acceptance",
+    CERQ_catastrophizing = "CERQ: Catastrophizing",
+    CERQ_other_blame = "CERQ: Other-Blame",
+    CERQ_self_blame = "CERQ: Self-Blame",
+    CERQ_perspective = "CERQ: Putting into Perspective",
+    CERQ_planning = "CERQ: Planning",
+    CERQ_reappraising = "CERQ: Positive Reappraisal",
+    CERQ_refocusing = "CERQ: Positive Refocusing",
+    CERQ_rumination = "CERQ: Rumination",
+    MHSAS_medication = "Medication Efficacy Beliefs",
+    MHSAS_therapy = "Therapy Efficacy Beliefs",
+    perceived_control = "Perceived Control"
+  )) %>%
+  ggplot(aes(x = PHQ8, y = value, group = depression_self_id, color = depression_self_id)) +
+  stat_summary(alpha = .25) +
+  geom_smooth(method = "loess", formula = "y ~ x", span = 1, se = F) +
+  scale_x_continuous(name = "PHQ-8 Sum Score") +
+  scale_y_continuous(name = "z-Score") +
+  scale_color_discrete(name = "Depression\nSelf-Labeling") +
+  facet_wrap(~ name) +
+  theme_classic()
+```
