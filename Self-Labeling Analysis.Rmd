@@ -142,6 +142,21 @@ kable(rq_1_uncontrolled, caption = "RQ 1, Unadjusted") %>%
   kable_styling()
 kable(rq_1_controlled, caption = "RQ 1, Adjusted") %>%
   kable_styling()
+
+# Table 2
+rq_1_uncontrolled %>%
+  left_join(rq_1_controlled, by = "term") %>%
+  mutate(
+    across(c(starts_with("oddsratio"), starts_with("ci_")),
+           ~ round(., 2)),
+    or_uncontrolled = oddsratio.x %+% " (" %+% `ci_low (2.5).x` %+% ", " %+% `ci_high (97.5).x` %+% ")",
+    p_adj_uncontrolled = round(p_adj.x, 3),
+    or_controlled = oddsratio.y %+% " (" %+% `ci_low (2.5).y` %+% ", " %+% `ci_high (97.5).y` %+% ")",
+    p_adj_controlled = round(p_adj.y, 3)
+  ) %>%
+  select(term, or_uncontrolled:p_adj_controlled) %>%
+  kable() %>%
+  kable_styling()
 ```
 
 # RQ 2: What is the relationship between self-labeling as being depressed and self-management strategies (emotion coping strategies, treatment efficacy beliefs)?
@@ -211,6 +226,21 @@ rq_2_controlled$p_adj <- p.adjust(rq_2_controlled$p.value, method = "fdr")
 kable(rq_2_uncontrolled, caption = "RQ 2, Unadjusted") %>%
   kable_styling()
 kable(rq_2_controlled, caption = "RQ 2, Adjusted") %>%
+  kable_styling()
+
+# Table 3
+rq_2_uncontrolled %>%
+  inner_join(rq_2_controlled, by = c("term", "dv")) %>%
+  mutate(
+    across(c(starts_with("estimate"), starts_with("ci_")),
+           ~ round(., 2)),
+    est_uncontrolled = estimate.x %+% " (" %+% ci_low.x %+% ", " %+% ci_high.x %+% ")",
+    p_adj_uncontrolled = round(p_adj.x, 3),
+    est_controlled = estimate.y %+% " (" %+% ci_low.y %+% ", " %+% ci_high.y %+% ")",
+    p_adj_controlled = round(p_adj.y, 3)
+  ) %>%
+  select(dv, est_uncontrolled:p_adj_controlled) %>%
+  kable() %>%
   kable_styling()
 ```
 
