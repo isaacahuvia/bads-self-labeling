@@ -8,9 +8,6 @@ raw_data <- read.spss("H:\\My Drive\\Research\\Projects\\Depression Beliefs\\BAD
 
 clean_data <- raw_data %>%
   
-  # Filter to respondents who passed attention checks
-  filter(Attn_FinalSum >= 4) %>%
-  
   # Create new/clean variables
   transmute(
     
@@ -19,8 +16,11 @@ clean_data <- raw_data %>%
     
     # Age (numeric)
     age = Demo_Age %>%
-      gsub("2o", "20", .) %>% # Replace mis-typed response with number
       trimws() %>% # Remove leading and trailing spaces
+      recode(
+        "' 18" = "18",
+        "2o" = "20"
+      ) %>% # Replace mis-typed responses with numbers
       as.numeric() %>% # Switch to numeric variable
       if_else(. == 10, NA_real_, .), # Set likely invalid outlier to NA
     
@@ -92,6 +92,12 @@ clean_data <- raw_data %>%
     MHSAS_therapy = scale(Therapy_Seeking_tot),
     MHSAS_medication = scale(Med_Seeking_tot),
     
+  ) %>%
+  
+  # Filter to respondents who passed attention checks, none older than 25 y/o
+  filter(
+    attention_checks >= 4,
+    age <= 25
   ) %>%
   
   # Reclass as numeric and factor to play nice with missForest

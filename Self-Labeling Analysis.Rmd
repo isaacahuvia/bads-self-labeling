@@ -137,12 +137,6 @@ for(x in demographics) {
 rq_1_uncontrolled$p_adj <- p.adjust(rq_1_uncontrolled$p.value, method = "fdr")
 rq_1_controlled$p_adj <- p.adjust(rq_1_controlled$p.value, method = "fdr")
 
-# Print output
-kable(rq_1_uncontrolled, caption = "RQ 1, Unadjusted") %>%
-  kable_styling()
-kable(rq_1_controlled, caption = "RQ 1, Adjusted") %>%
-  kable_styling()
-
 # Table 2
 rq_1_uncontrolled %>%
   left_join(rq_1_controlled, by = "term") %>%
@@ -222,12 +216,6 @@ for(y in outcomes) {
 rq_2_uncontrolled$p_adj <- p.adjust(rq_2_uncontrolled$p.value, method = "fdr")
 rq_2_controlled$p_adj <- p.adjust(rq_2_controlled$p.value, method = "fdr")
 
-# Print output
-kable(rq_2_uncontrolled, caption = "RQ 2, Unadjusted") %>%
-  kable_styling()
-kable(rq_2_controlled, caption = "RQ 2, Adjusted") %>%
-  kable_styling()
-
 # Table 3
 rq_2_uncontrolled %>%
   inner_join(rq_2_controlled, by = c("term", "dv")) %>%
@@ -259,30 +247,11 @@ lm(
 
 # Plots
 
-Self-labeling by age and PHQ-8, smoothed
-
-```{r}
-df %>%
-  mutate(age_rounded = round(age)) %>%
-  filter(PHQ8_cutoff == T,
-         age_rounded %in% c(18, 19, 20, 21, 22)) %>%
-  group_by(age_rounded) %>%
-  summarize(n = n(),
-            prop_self_id = mean(depression_self_id),
-            sd_self_id = sd(depression_self_id)) %>%
-  mutate(se_self_id = sd_self_id / sqrt(n),
-         ci_lower = prop_self_id - (1.96 * se_self_id),
-         ci_upper = prop_self_id + (1.96 * se_self_id)) %>%
-  ggplot(aes(age_rounded, prop_self_id)) +
-  geom_point() + 
-  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper))
-```
-
 Outcomes by self-labeling and PHQ-8, smoothed
 
 ```{r}
 df %>%
-  pivot_longer(cols = c("perceived_control", "CERQ_rumination", "CERQ_catastrophizing", "CERQ_perspective", "CERQ_refocusing", "CERQ_reappraising", "CERQ_planning", "MHSAS_medication")) %>%
+  pivot_longer(cols = c("perceived_control", "CERQ_catastrophizing", "CERQ_perspective", "CERQ_refocusing", "CERQ_reappraising", "CERQ_planning", "MHSAS_medication")) %>%
   mutate(name = recode(
     name, 
     CERQ_acceptance = "CERQ: Acceptance",
@@ -290,12 +259,12 @@ df %>%
     CERQ_other_blame = "CERQ: Other-Blame",
     CERQ_self_blame = "CERQ: Self-Blame",
     CERQ_perspective = "CERQ: Putting into Perspective",
-    CERQ_planning = "CERQ: Planning",
+    CERQ_planning = "CERQ: Refocusing on Planning",
     CERQ_reappraising = "CERQ: Positive Reappraisal",
     CERQ_refocusing = "CERQ: Positive Refocusing",
     CERQ_rumination = "CERQ: Rumination",
-    MHSAS_medication = "Medication Efficacy Beliefs",
-    MHSAS_therapy = "Therapy Efficacy Beliefs",
+    MHSAS_medication = "MHSAS: Medication-Seeking",
+    MHSAS_therapy = "MHSAS: Therapy-Seeking",
     perceived_control = "Perceived Control"
   )) %>%
   ggplot(aes(x = PHQ8, y = value, group = depression_self_id, color = depression_self_id)) +
